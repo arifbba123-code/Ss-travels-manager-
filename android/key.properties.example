@@ -1,0 +1,8 @@
+# Copy this file to "key.properties" (same folder) and fill in your real
+# upload-keystore details to sign release builds with your own key instead
+# of the debug key. "key.properties" itself is git-ignored so your secrets
+# are never committed.
+storePassword=your-keystore-password
+keyPassword=your-key-password
+keyAlias=your-key-alias
+storeFile=/absolute/or/relative/path/to/upload-keystore.jks

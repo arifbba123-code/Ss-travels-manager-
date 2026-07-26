@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "89252745052",
+    "project_id": "ss-travels-ffc6a",
+    "storage_bucket": "ss-travels-ffc6a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:89252745052:android:12b41e8d08888a542e3b99",
+        "android_client_info": {
+          "package_name": "com.sstours.sstours_travels"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAoqImC0ldsDOU52VSZTIxmWYfXZ-RuabA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

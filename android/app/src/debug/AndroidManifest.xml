@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Only used by the Flutter tool during `flutter run` for the debug
+         VM service connection — never used by the release APK. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+</manifest>

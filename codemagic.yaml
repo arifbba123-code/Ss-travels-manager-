@@ -1,0 +1,32 @@
+workflows:
+  android-release:
+    name: SS Tours & Travels - Android APK & AAB
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+
+    environment:
+      flutter: stable
+
+    scripts:
+      - name: Regenerate Gradle wrapper jar
+        # The checked-in project ships gradlew / gradlew.bat but not the
+        # binary gradle-wrapper.jar (binary assets can't be produced in
+        # every environment). Codemagic images ship Gradle preinstalled,
+        # so regenerate the wrapper jar to match gradle-wrapper.properties
+        # before Flutter invokes ./gradlew. This is a no-op if the jar is
+        # already present and up to date.
+        script: |
+          cd android
+          gradle wrapper --gradle-version 8.14.3 --distribution-type bin
+          chmod +x gradlew
+          cd ..
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Build release APK
+        script: flutter build apk --release
+      - name: Build release AAB
+        script: flutter build appbundle --release
+
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/bundle/release/*.aab
