@@ -4,37 +4,46 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.7.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.6
+  cupertino_icons: ^1.0.8
 
-  # Firebase — cloud backend (replaces the old local SQLite database)
-  firebase_core: ^3.8.0
-  firebase_auth: ^5.3.3
-  cloud_firestore: ^5.5.0
-  google_sign_in: ^6.2.2
+  # Firebase — cloud backend (replaces the old local SQLite database).
+  # These three (firebase_core / firebase_auth / cloud_firestore) are
+  # released together by the FlutterFire team, so keeping them on their
+  # current latest majors is what actually resolves cleanly — pinning
+  # older individual versions is what caused the original conflict.
+  firebase_core: ^4.8.0
+  firebase_auth: ^6.5.0
+  cloud_firestore: ^6.1.2
+
+  # Google Sign-In v7 — new singleton API (GoogleSignIn.instance),
+  # see lib/services/firebase_auth_service.dart for the migrated flow.
+  google_sign_in: ^7.2.0
+
+  # Share to WhatsApp / other apps. v12 is what finally moved to the
+  # same `web: ^1.x` generation as current Firebase packages — this is
+  # the actual fix for the original firebase_auth/share_plus conflict.
+  share_plus: ^12.0.1
 
   # Local device storage (used only for the "Remember me" preference —
   # no business data is stored on-device anymore)
-  shared_preferences: ^2.3.3
+  shared_preferences: ^2.5.0
 
-  path_provider: ^2.1.3
+  path_provider: ^2.1.5
 
   # State management
   provider: ^6.1.2
 
   # PDF report generation
-  pdf: ^3.11.0
-  printing: ^5.13.1
+  pdf: ^3.11.3
+  printing: ^5.14.3
 
   # PNG image report generation
   screenshot: ^3.0.0
-
-  # Share to WhatsApp / other apps
-  share_plus: ^9.0.0
 
   # Formatting
   intl: ^0.19.0

@@ -266,12 +266,16 @@ class ReportService {
 
   static Future<void> sharePdf(DailyEntry entry) async {
     final file = await generatePdf(entry);
-    await Share.shareXFiles([XFile(file.path)],
-        text: 'Daily report from $companyName - ${entry.date}');
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(file.path)],
+      text: 'Daily report from $companyName - ${entry.date}',
+    ));
   }
 
   static Future<void> sharePng(File pngFile, DailyEntry entry) async {
-    await Share.shareXFiles([XFile(pngFile.path)],
-        text: 'Daily report from $companyName - ${entry.date}');
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(pngFile.path)],
+      text: 'Daily report from $companyName - ${entry.date}',
+    ));
   }
 }

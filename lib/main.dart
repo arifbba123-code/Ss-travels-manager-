@@ -19,9 +19,13 @@ Future<void> main() async {
     // sync automatically the moment connectivity returns. This is on by
     // default on Android/iOS, but set explicitly for clarity and to size
     // the cache generously for a growing fleet dataset.
-    FirebaseFirestore.instance.settings = const Settings(
-      persistenceEnabled: true,
-      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    //
+    // NOTE: `persistenceEnabled` / `cacheSizeBytes` are deprecated in
+    // current cloud_firestore — `cacheSettings` is the replacement, and
+    // setting both old and new fields together throws at runtime, so this
+    // must be the ONLY cache configuration below.
+    FirebaseFirestore.instance.settings = Settings(
+      cacheSettings: PersistentCacheSettings(sizeBytes: Settings.CACHE_SIZE_UNLIMITED),
     );
   } catch (e) {
     // The whole app is now backed by Firebase (Auth + Firestore) — if it

@@ -9,14 +9,24 @@ class AuthException implements Exception {
 }
 
 /// Thin wrapper around FirebaseAuth + GoogleSignIn. This is the ONLY file
-/// that talks to the Firebase Auth SDK directly — every screen goes
-/// through here so the sign-in flow stays consistent everywhere.
+/// that talks to the Firebase Auth / Google Sign-In SDKs directly — every
+/// screen goes through here so the sign-in flow stays consistent
+/// everywhere.
+///
+/// Written against google_sign_in ^7.x, which replaced the old
+/// `GoogleSignIn()` constructor + `signIn()` API with a singleton
+/// (`GoogleSignIn.instance`) that must be explicitly `initialize()`d once,
+/// an `authenticate()` call that throws [GoogleSignInException] instead of
+/// returning null on cancel, and a separate `authorizationClient` step to
+/// obtain an access token (the ID token now comes synchronously off
+/// `GoogleSignInAccount.authentication`).
 class FirebaseAuthService {
   FirebaseAuthService._internal();
   static final FirebaseAuthService instance = FirebaseAuthService._internal();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+  bool _googleSignInReady = false;
 
   /// Firebase Auth on Android always persists the session to disk, which is
   /// what gives us "auto login" for free after the app is reopened. This
@@ -25,6 +35,16 @@ class FirebaseAuthService {
   Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   User? get currentUser => _auth.currentUser;
+
+  Future<void> _ensureGoogleSignInInitialized() async {
+    if (_googleSignInReady) return;
+    // With a Firebase Android app, no clientId needs to be passed here —
+    // it's resolved automatically from google-services.json, provided a
+    // web OAuth client entry exists there (which requires the app's SHA-1
+    // fingerprint to be registered in the Firebase console).
+    await _googleSignIn.initialize();
+    _googleSignInReady = true;
+  }
 
   Future<User> signInWithEmail({required String email, required String password}) async {
     try {
@@ -42,15 +62,25 @@ class FirebaseAuthService {
 
   Future<User> signInWithGoogle() async {
     try {
-      await _googleSignIn.signOut(); // ensure the account picker always shows
-      final googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        throw AuthException('Google sign-in was cancelled.');
+      await _ensureGoogleSignInInitialized();
+
+      final GoogleSignInAccount googleUser;
+      try {
+        googleUser = await _googleSignIn.authenticate();
+      } on GoogleSignInException catch (e) {
+        throw AuthException(_mapGoogleError(e));
       }
-      final googleAuth = await googleUser.authentication;
+
+      // Authorize the scopes we need to get an access token alongside the
+      // ID token (Firebase accepts an ID-token-only credential too, but
+      // including the access token is what the current FlutterFire /
+      // google_sign_in v7 guidance recommends).
+      final authorization =
+          await googleUser.authorizationClient.authorizeScopes(['email', 'profile']);
+
       final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
-        idToken: googleAuth.idToken,
+        idToken: googleUser.authentication.idToken,
+        accessToken: authorization.accessToken,
       );
       final cred = await _auth.signInWithCredential(credential);
       final user = cred.user;
@@ -80,11 +110,24 @@ class FirebaseAuthService {
 
   Future<void> signOut() async {
     try {
-      await _googleSignIn.signOut();
+      if (_googleSignInReady) {
+        await _googleSignIn.signOut();
+      }
     } catch (_) {
       // Not signed in with Google — safe to ignore.
     }
     await _auth.signOut();
+  }
+
+  String _mapGoogleError(GoogleSignInException e) {
+    switch (e.code) {
+      case GoogleSignInExceptionCode.canceled:
+        return 'Google sign-in was cancelled.';
+      case GoogleSignInExceptionCode.interrupted:
+        return 'Google sign-in was interrupted. Please try again.';
+      default:
+        return 'Google sign-in failed: ${e.description ?? e.code}';
+    }
   }
 
   String _mapError(FirebaseAuthException e) {

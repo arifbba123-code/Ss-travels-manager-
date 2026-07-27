@@ -116,7 +116,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             if (!admin.emailVerified) ...[
               const SizedBox(height: 10),
               Card(
-                color: AppColors.orange.withOpacity(0.15),
+                color: AppColors.orange.withValues(alpha: 0.15),
                 child: ListTile(
                   leading: const Icon(Icons.mark_email_unread_outlined, color: AppColors.orange),
                   title: const Text('Email not verified', style: TextStyle(color: Colors.white)),
