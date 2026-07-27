@@ -24,10 +24,10 @@ Future<void> main() async {
     // current cloud_firestore — `cacheSettings` is the replacement, and
     // setting both old and new fields together throws at runtime, so this
     // must be the ONLY cache configuration below.
-    FirebaseFirestore.instance.settings = Settings(
-      cacheSettings: PersistentCacheSettings(sizeBytes: Settings.CACHE_SIZE_UNLIMITED),
-    );
-  } catch (e) {
+    FirebaseFirestore.instance.settings = const Settings(
+  persistenceEnabled: true,
+  cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+);
     // The whole app is now backed by Firebase (Auth + Firestore) — if it
     // fails to initialize (missing/invalid google-services.json, no Play
     // Services, etc.) the app cannot function, so surface a clear error
