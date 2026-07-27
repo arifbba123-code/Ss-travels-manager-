@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/app_user.dart';
+import '../../providers/auth_provider.dart';
 import '../../theme/app_theme.dart';
 import 'login_screen.dart';
 
@@ -61,8 +63,10 @@ class RoleHeaderCard extends StatelessWidget {
                 color: AppColors.panel2,
                 icon: const Icon(Icons.more_vert, color: AppColors.grey),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                onSelected: (v) {
+                onSelected: (v) async {
                   if (v == 'logout') {
+                    await context.read<AuthProvider>().signOut();
+                    if (!context.mounted) return;
                     Navigator.of(context).pushAndRemoveUntil(
                       MaterialPageRoute(builder: (_) => const LoginScreen()),
                       (route) => false,

@@ -1,6 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../db/db_helper.dart';
+import '../models/driver.dart';
+import '../models/entry.dart';
+import '../models/vehicle.dart';
+import '../services/driver_repository.dart';
+import '../services/entry_repository.dart';
+import '../services/vehicle_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stat_card.dart';
 import 'home_shell.dart';
@@ -15,31 +21,46 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final _db = DBHelper.instance;
   Map<String, double> _today = {'collection': 0, 'profit': 0};
   Map<String, double> _month = {'collection': 0, 'profit': 0};
   int _vehicleCount = 0;
   int _driverCount = 0;
 
+  StreamSubscription<List<DailyEntry>>? _entriesSub;
+  StreamSubscription<List<Vehicle>>? _vehiclesSub;
+  StreamSubscription<List<Driver>>? _driversSub;
+
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final today = await _db.getTodayStats();
-    final month = await _db.getThisMonthStats();
-    final vehicles = await _db.getVehicles();
-    final drivers = await _db.getDrivers();
-    if (!mounted) return;
-    setState(() {
-      _today = today;
-      _month = month;
-      _vehicleCount = vehicles.where((v) => v.active).length;
-      _driverCount = drivers.where((d) => d.active).length;
+    // Firestore streams keep this dashboard live across every admin's
+    // device automatically — no manual refresh needed.
+    _entriesSub = EntryRepository.instance.watchAll().listen((all) {
+      if (!mounted) return;
+      setState(() {
+        _today = EntryStats.todayStats(all);
+        _month = EntryStats.thisMonthStats(all);
+      });
+    });
+    _vehiclesSub = VehicleRepository.instance.watchAll().listen((all) {
+      if (!mounted) return;
+      setState(() => _vehicleCount = all.where((v) => v.active).length);
+    });
+    _driversSub = DriverRepository.instance.watchAll().listen((all) {
+      if (!mounted) return;
+      setState(() => _driverCount = all.where((d) => d.active).length);
     });
   }
+
+  @override
+  void dispose() {
+    _entriesSub?.cancel();
+    _vehiclesSub?.cancel();
+    _driversSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {} // kept for RefreshIndicator compatibility; streams keep data live
 
   String _money(double v) => '₹${NumberFormat('#,##0.##').format(v)}';
 

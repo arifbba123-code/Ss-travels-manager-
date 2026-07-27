@@ -41,6 +41,10 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+        // Some Firebase / plugin dependencies require Java 8+ library
+        // desugaring on minSdk < 26 — enabling this avoids a common
+        // "requires core library desugaring" Gradle build failure.
+        coreLibraryDesugaringEnabled true
     }
 
     kotlinOptions {
@@ -86,4 +90,5 @@ flutter {
 
 dependencies {
     implementation 'androidx.multidex:multidex:2.0.1'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
 }

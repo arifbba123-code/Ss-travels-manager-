@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../db/db_helper.dart';
 import '../models/entry.dart';
 import '../models/vehicle.dart';
 import '../models/driver.dart';
+import '../services/driver_repository.dart';
+import '../services/entry_repository.dart';
+import '../services/vehicle_repository.dart';
 import '../theme/app_theme.dart';
 import 'home_shell.dart';
 import 'entry_detail_screen.dart';
@@ -17,9 +20,9 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  final _db = DBHelper.instance;
   final _searchCtrl = TextEditingController();
 
+  List<DailyEntry> _allEntries = [];
   List<DailyEntry> _entries = [];
   List<Vehicle> _vehicles = [];
   List<Driver> _drivers = [];
@@ -28,26 +31,58 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Driver? _filterDriver;
   DateTimeRange? _range;
 
+  StreamSubscription<List<DailyEntry>>? _entriesSub;
+  StreamSubscription<List<Vehicle>>? _vehiclesSub;
+  StreamSubscription<List<Driver>>? _driversSub;
+
   @override
   void initState() {
     super.initState();
-    _load();
+    // Every filter combination below runs client-side over this one live
+    // stream, so search/filter results stay real-time without needing a
+    // dedicated Firestore query (and matching index) per combination.
+    _entriesSub = EntryRepository.instance.watchAll().listen((all) {
+      if (!mounted) return;
+      _allEntries = all;
+      _applyFilters();
+    });
+    _vehiclesSub = VehicleRepository.instance.watchAll().listen((v) {
+      if (!mounted) return;
+      setState(() => _vehicles = v);
+    });
+    _driversSub = DriverRepository.instance.watchAll().listen((d) {
+      if (!mounted) return;
+      setState(() => _drivers = d);
+    });
   }
 
-  Future<void> _load() async {
-    _vehicles = await _db.getVehicles();
-    _drivers = await _db.getDrivers();
-    await _applyFilters();
+  @override
+  void dispose() {
+    _entriesSub?.cancel();
+    _vehiclesSub?.cancel();
+    _driversSub?.cancel();
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
-  Future<void> _applyFilters() async {
-    final results = await _db.searchEntries(
-      query: _searchCtrl.text,
-      vehicleId: _filterVehicle?.id,
-      driverId: _filterDriver?.id,
-      from: _range?.start,
-      to: _range?.end,
-    );
+  void _applyFilters() {
+    final query = _searchCtrl.text.trim().toLowerCase();
+    final results = _allEntries.where((e) {
+      if (_filterVehicle != null && e.vehicleId != _filterVehicle!.id) return false;
+      if (_filterDriver != null && e.driverId != _filterDriver!.id) return false;
+      if (_range != null) {
+        final d = DateTime.tryParse(e.date);
+        if (d == null) return false;
+        final startOk = !d.isBefore(DateTime(_range!.start.year, _range!.start.month, _range!.start.day));
+        final endOk = !d.isAfter(DateTime(_range!.end.year, _range!.end.month, _range!.end.day, 23, 59, 59));
+        if (!startOk || !endOk) return false;
+      }
+      if (query.isNotEmpty) {
+        final haystack = '${e.vehicleName} ${e.driverName} ${e.notes} ${e.date}'.toLowerCase();
+        if (!haystack.contains(query)) return false;
+      }
+      return true;
+    }).toList();
     if (!mounted) return;
     setState(() => _entries = results);
   }
@@ -210,7 +245,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
             MaterialPageRoute(builder: (_) => EntryDetailScreen(entry: e)),
           );
           if (changed == true) {
-            await _load();
+            // The Firestore stream already pushed the update — just notify
+            // any listeners (e.g. dashboard) that something changed.
             widget.onChanged();
           }
         },

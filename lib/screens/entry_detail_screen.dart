@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:screenshot/screenshot.dart';
-import '../db/db_helper.dart';
 import '../models/entry.dart';
+import '../providers/auth_provider.dart';
+import '../services/entry_repository.dart';
+import '../services/reports_log_repository.dart';
 import '../services/report_service.dart';
 import '../theme/app_theme.dart';
 import 'daily_entry_screen.dart';
@@ -16,16 +20,29 @@ class EntryDetailScreen extends StatefulWidget {
 }
 
 class _EntryDetailScreenState extends State<EntryDetailScreen> {
-  final _db = DBHelper.instance;
   final _screenshotController = ScreenshotController();
   late DailyEntry _entry;
   bool _busy = false;
   bool _changed = false;
+  StreamSubscription<List<DailyEntry>>? _sub;
 
   @override
   void initState() {
     super.initState();
     _entry = widget.entry;
+    // Real-time: if another admin edits this exact entry on another
+    // device while this screen is open, it updates here instantly too.
+    _sub = EntryRepository.instance.watchAll().listen((all) {
+      if (!mounted) return;
+      final match = all.where((e) => e.id == _entry.id);
+      if (match.isNotEmpty) setState(() => _entry = match.first);
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
   }
 
   Future<void> _edit() async {
@@ -35,9 +52,7 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
       ),
     );
     if (result == true) {
-      final all = await _db.getEntries();
-      final updated = all.where((e) => e.id == _entry.id);
-      if (updated.isNotEmpty) setState(() => _entry = updated.first);
+      // The live stream in initState already refreshes `_entry`.
       _changed = true;
     }
   }
@@ -60,7 +75,8 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
       ),
     );
     if (ok == true && _entry.id != null) {
-      await _db.deleteEntry(_entry.id!);
+      final acting = context.read<AuthProvider>().currentAdmin!;
+      await EntryRepository.instance.delete(_entry, acting);
       if (!mounted) return;
       Navigator.of(context).pop(true);
     }
@@ -70,6 +86,10 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
     setState(() => _busy = true);
     try {
       await ReportService.sharePdf(_entry);
+      final acting = context.read<AuthProvider>().currentAdmin;
+      if (acting != null) {
+        await ReportsLogRepository.instance.logGenerated(entry: _entry, format: 'pdf', actingAdmin: acting);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -80,6 +100,10 @@ class _EntryDetailScreenState extends State<EntryDetailScreen> {
     try {
       final file = await ReportService.generatePng(_screenshotController);
       await ReportService.sharePng(file, _entry);
+      final acting = context.read<AuthProvider>().currentAdmin;
+      if (acting != null) {
+        await ReportsLogRepository.instance.logGenerated(entry: _entry, format: 'png', actingAdmin: acting);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

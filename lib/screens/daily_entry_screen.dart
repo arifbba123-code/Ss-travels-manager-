@@ -1,9 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../db/db_helper.dart';
+import 'package:provider/provider.dart';
 import '../models/vehicle.dart';
 import '../models/driver.dart';
 import '../models/entry.dart';
+import '../providers/auth_provider.dart';
+import '../services/driver_repository.dart';
+import '../services/entry_repository.dart';
+import '../services/vehicle_repository.dart';
 import '../theme/app_theme.dart';
 import 'home_shell.dart';
 
@@ -18,11 +23,13 @@ class DailyEntryScreen extends StatefulWidget {
 }
 
 class _DailyEntryScreenState extends State<DailyEntryScreen> {
-  final _db = DBHelper.instance;
   final _formKey = GlobalKey<FormState>();
 
   List<Vehicle> _vehicles = [];
   List<Driver> _drivers = [];
+  StreamSubscription<List<Vehicle>>? _vehiclesSub;
+  StreamSubscription<List<Driver>>? _driversSub;
+  bool _saving = false;
 
   DateTime _date = DateTime.now();
   Vehicle? _vehicle;
@@ -43,7 +50,7 @@ class _DailyEntryScreenState extends State<DailyEntryScreen> {
   @override
   void initState() {
     super.initState();
-    _loadLists();
+    _subscribeLists();
     for (final c in [_online, _cash, _cng, _petrol, _salary, _rental, _other, _oldBalance]) {
       c.addListener(() => setState(() {}));
     }
@@ -65,26 +72,47 @@ class _DailyEntryScreenState extends State<DailyEntryScreen> {
 
   String _n(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toString();
 
-  Future<void> _loadLists() async {
-    final vs = await _db.getVehicles();
-    final ds = await _db.getDrivers();
-    setState(() {
-      _vehicles = vs;
-      _drivers = ds;
-      if (widget.existing != null) {
-        _vehicle = vs.where((v) => v.id == widget.existing!.vehicleId).cast<Vehicle?>().firstOrNull;
-        _driver = ds.where((d) => d.id == widget.existing!.driverId).cast<Driver?>().firstOrNull;
-      } else {
-        _vehicle = vs.isNotEmpty ? vs.first : null;
-        _driver = ds.isNotEmpty ? ds.first : null;
-      }
+  bool _listsInitialized = false;
+
+  void _subscribeLists() {
+    // Live streams: if another admin adds a vehicle/driver on another
+    // device while this form is open, it appears in the dropdowns here
+    // instantly.
+    _vehiclesSub = VehicleRepository.instance.watchAll().listen((vs) {
+      if (!mounted) return;
+      setState(() {
+        _vehicles = vs;
+        if (!_listsInitialized) {
+          _vehicle = widget.existing != null
+              ? vs.where((v) => v.id == widget.existing!.vehicleId).cast<Vehicle?>().firstOrNull
+              : (vs.isNotEmpty ? vs.first : null);
+        } else if (_vehicle != null) {
+          // keep selection in sync with any edits to the selected vehicle
+          _vehicle = vs.where((v) => v.id == _vehicle!.id).cast<Vehicle?>().firstOrNull ?? _vehicle;
+        }
+      });
+      if (_oldBalanceAuto && _vehicle != null) _autoFillOldBalance();
     });
-    if (_oldBalanceAuto && _vehicle != null) _autoFillOldBalance();
+    _driversSub = DriverRepository.instance.watchAll().listen((ds) {
+      if (!mounted) return;
+      setState(() {
+        _drivers = ds;
+        if (!_listsInitialized) {
+          _driver = widget.existing != null
+              ? ds.where((d) => d.id == widget.existing!.driverId).cast<Driver?>().firstOrNull
+              : (ds.isNotEmpty ? ds.first : null);
+          _listsInitialized = true;
+        } else if (_driver != null) {
+          _driver = ds.where((d) => d.id == _driver!.id).cast<Driver?>().firstOrNull ?? _driver;
+        }
+      });
+    });
   }
 
   Future<void> _autoFillOldBalance() async {
     if (_vehicle?.id == null) return;
-    final bal = await _db.getLastBalanceForVehicle(_vehicle!.id!, excludeEntryId: widget.existing?.id);
+    final bal = await EntryRepository.instance
+        .getLastBalanceForVehicle(_vehicle!.id!, excludeEntryId: widget.existing?.id);
     if (!mounted) return;
     setState(() => _oldBalance.text = _n(bal));
   }
@@ -98,6 +126,8 @@ class _DailyEntryScreenState extends State<DailyEntryScreen> {
 
   @override
   void dispose() {
+    _vehiclesSub?.cancel();
+    _driversSub?.cancel();
     for (final c in [_online, _cash, _cng, _petrol, _salary, _rental, _other, _oldBalance, _notes]) {
       c.dispose();
     }
@@ -130,13 +160,24 @@ class _DailyEntryScreenState extends State<DailyEntryScreen> {
       notes: _notes.text.trim(),
     );
 
-    if (widget.existing != null) {
-      await _db.updateEntry(entry);
-    } else {
-      await _db.insertEntry(entry);
+    setState(() => _saving = true);
+    final acting = context.read<AuthProvider>().currentAdmin!;
+    try {
+      if (widget.existing != null) {
+        await EntryRepository.instance.update(entry, acting);
+      } else {
+        await EntryRepository.instance.create(entry, acting);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save entry: $e')));
+      }
+      return;
     }
 
     if (!mounted) return;
+    setState(() => _saving = false);
     if (widget.existing != null) {
       Navigator.of(context).pop(true);
     } else {
@@ -206,9 +247,13 @@ class _DailyEntryScreenState extends State<DailyEntryScreen> {
                 _summaryCard(),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
-                  icon: Icon(isEdit ? Icons.save : Icons.check_circle),
+                  icon: _saving
+                      ? const SizedBox(
+                          width: 18, height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : Icon(isEdit ? Icons.save : Icons.check_circle),
                   label: Text(isEdit ? 'UPDATE ENTRY' : 'SAVE ENTRY'),
-                  onPressed: _save,
+                  onPressed: _saving ? null : _save,
                 ),
                 const SizedBox(height: 12),
               ],

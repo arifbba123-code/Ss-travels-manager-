@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
 import '../../models/app_user.dart';
-import '../../services/auth_service.dart';
+import '../../services/admin_repository.dart';
+import '../../services/firebase_auth_service.dart';
 import '../../theme/app_theme.dart';
-import 'owner_dashboard_screen.dart';
-import 'admin_dashboard_screen.dart';
-import 'driver_dashboard_screen.dart';
+import 'role_router.dart';
 
 /// SCREEN 2 — Loading
 ///
-/// Shown right after the user taps Login. Verifies the email/password,
-/// looks up the account's role in the `users` table, then routes to the
-/// matching dashboard — Owner, Admin, or Driver.
+/// Shown right after the user taps Login (or chooses Google Sign-In).
+/// Authenticates with Firebase, resolves the account's role from the
+/// Firestore `admins` collection, then routes to the matching dashboard.
 class AuthLoadingScreen extends StatefulWidget {
-  final String email;
-  final String password;
-  const AuthLoadingScreen({super.key, required this.email, required this.password});
+  final String? email;
+  final String? password;
+  final bool google;
+
+  const AuthLoadingScreen({super.key, required String this.email, required String this.password})
+      : google = false;
+
+  const AuthLoadingScreen.google({super.key})
+      : email = null,
+        password = null,
+        google = true;
 
   @override
   State<AuthLoadingScreen> createState() => _AuthLoadingScreenState();
@@ -31,45 +38,34 @@ class _AuthLoadingScreenState extends State<AuthLoadingScreen> {
 
   Future<void> _run() async {
     try {
-      final user = await AuthService.instance.login(
-        email: widget.email,
-        password: widget.password,
-      );
+      final firebaseUser = widget.google
+          ? await FirebaseAuthService.instance.signInWithGoogle()
+          : await FirebaseAuthService.instance
+              .signInWithEmail(email: widget.email!, password: widget.password!);
 
       if (!mounted) return;
       setState(() => _status = 'Checking account role…');
-      await Future.delayed(const Duration(milliseconds: 500));
+
+      final user = await AdminRepository.instance.resolveOrBootstrap(firebaseUser);
 
       if (!mounted) return;
       setState(() => _status = 'Setting up ${user.role.label} dashboard…');
-      await Future.delayed(const Duration(milliseconds: 500));
+      await Future.delayed(const Duration(milliseconds: 400));
 
       if (!mounted) return;
       _routeByRole(user);
     } on AuthException catch (e) {
       if (!mounted) return;
       _fail(e.message);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       _fail('Something went wrong. Please try again.');
     }
   }
 
   void _routeByRole(AppUser user) {
-    late final Widget dashboard;
-    switch (user.role) {
-      case UserRole.owner:
-        dashboard = OwnerDashboardScreen(user: user);
-        break;
-      case UserRole.admin:
-        dashboard = AdminDashboardScreen(user: user);
-        break;
-      case UserRole.driver:
-        dashboard = DriverDashboardScreen(user: user);
-        break;
-    }
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => dashboard),
+      MaterialPageRoute(builder: (_) => dashboardForRole(user)),
       (route) => false,
     );
   }

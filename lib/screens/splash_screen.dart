@@ -1,11 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
+import '../services/admin_repository.dart';
+import '../services/firebase_auth_service.dart';
 import 'auth/login_screen.dart';
+import 'auth/role_router.dart';
 
 /// Simple branded splash screen. Gives the app its polished first
-/// impression before dropping into the authentication flow.
-class SplashScreen extends StatelessWidget {
+/// impression, and — if Firebase already has a remembered session
+/// (auto-login) — quietly resolves the admin's role and jumps straight
+/// to their dashboard instead of requiring another login.
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  bool _checking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _tryAutoLogin();
+  }
+
+  Future<void> _tryAutoLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rememberMe = prefs.getBool('remember_me') ?? true;
+    final user = FirebaseAuthService.instance.currentUser;
+
+    if (user == null) {
+      setState(() => _checking = false);
+      return;
+    }
+
+    if (!rememberMe) {
+      // The admin unchecked "Remember me" last time — honor that by not
+      // auto-restoring their session on a fresh app launch.
+      await FirebaseAuthService.instance.signOut();
+      if (!mounted) return;
+      setState(() => _checking = false);
+      return;
+    }
+
+    try {
+      final admin = await AdminRepository.instance.resolveOrBootstrap(user);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => dashboardForRole(admin)),
+      );
+    } catch (_) {
+      // Session no longer valid (deactivated / removed) — fall back to
+      // showing the normal splash + login flow.
+      if (!mounted) return;
+      setState(() => _checking = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +109,7 @@ class SplashScreen extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Manage your fleet, drivers & daily accounts —\nfully offline.',
+                'Manage your fleet, drivers & daily accounts —\nsynced live across every admin device.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.grey, fontSize: 14),
               ),
@@ -65,13 +117,19 @@ class SplashScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  icon: const Icon(Icons.login),
-                  label: const Text('CONTINUE'),
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    );
-                  },
+                  icon: _checking
+                      ? const SizedBox(
+                          width: 18, height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : const Icon(Icons.login),
+                  label: Text(_checking ? 'CHECKING SESSION…' : 'CONTINUE'),
+                  onPressed: _checking
+                      ? null
+                      : () {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(builder: (_) => const LoginScreen()),
+                          );
+                        },
                 ),
               ),
               const SizedBox(height: 24),

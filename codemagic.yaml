@@ -6,6 +6,14 @@ workflows:
 
     environment:
       flutter: stable
+      # If you want Codemagic to sign the release build with your real
+      # upload keystore, add an Android keystore reference in the
+      # Codemagic UI (Workflow -> Code signing -> Android) named
+      # "sstours_keystore" — that automatically populates the
+      # CM_KEYSTORE_PATH / CM_KEYSTORE_PASSWORD / CM_KEY_ALIAS /
+      # CM_KEY_PASSWORD variables used below. If you skip this, the build
+      # still succeeds — it just falls back to the debug key, same as a
+      # local `flutter build apk` without a configured keystore.
 
     scripts:
       - name: Regenerate Gradle wrapper jar
@@ -20,12 +28,67 @@ workflows:
           gradle wrapper --gradle-version 8.14.3 --distribution-type bin
           chmod +x gradlew
           cd ..
+
+      - name: Verify Firebase config is present
+        # Fails fast with a clear message instead of a confusing Gradle
+        # error deep in the build if google-services.json is ever
+        # accidentally missing from a checkout.
+        script: |
+          if [ ! -f "android/app/google-services.json" ]; then
+            echo "ERROR: android/app/google-services.json is missing." \
+                 "Download it from Firebase Console -> Project Settings -> Your apps," \
+                 "and commit it to the repo (or add it as a Codemagic encrypted file)."
+            exit 1
+          fi
+          echo "google-services.json found."
+
+      - name: Write Android release signing config (optional)
+        # Only runs if a keystore has been configured in Codemagic's Code
+        # signing settings (which populates CM_KEYSTORE_PATH). Otherwise
+        # this step is skipped entirely and android/app/build.gradle
+        # falls back to the debug key automatically.
+        script: |
+          if [ -n "$CM_KEYSTORE_PATH" ]; then
+            cat > android/key.properties <<EOF
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyPassword=$CM_KEY_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          storeFile=$CM_KEYSTORE_PATH
+          EOF
+            echo "android/key.properties written from Codemagic keystore reference."
+          else
+            echo "No CM_KEYSTORE_PATH set — building with the debug signing key."
+          fi
+
       - name: Get Flutter packages
         script: flutter pub get
+
+      - name: Analyze (non-blocking)
+        script: flutter analyze || true
+
       - name: Build release APK
         script: flutter build apk --release
+
       - name: Build release AAB
         script: flutter build appbundle --release
+
+      - name: Print SHA-1 / SHA-256 fingerprints (optional)
+        # Useful for registering this build's signing certificate with
+        # Firebase (Project Settings -> Your apps -> Add fingerprint),
+        # which Google Sign-In requires. Only runs when a keystore is
+        # configured; otherwise it's skipped so the build never fails on
+        # a missing keystore.
+        script: |
+          if [ -n "$CM_KEYSTORE_PATH" ]; then
+            keytool -list -v \
+              -keystore "$CM_KEYSTORE_PATH" \
+              -storepass "$CM_KEYSTORE_PASSWORD" \
+              -alias "$CM_KEY_ALIAS" \
+              -keypass "$CM_KEY_PASSWORD" \
+              | grep -E "SHA1:|SHA256:"
+          else
+            echo "Skipped — no keystore configured for this build."
+          fi
 
     artifacts:
       - build/app/outputs/flutter-apk/*.apk

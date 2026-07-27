@@ -1,8 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../../db/db_helper.dart';
 import '../../models/app_user.dart';
 import '../../models/entry.dart';
+import '../../services/entry_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/stat_card.dart';
 import 'role_dashboard_widgets.dart';
@@ -21,25 +22,32 @@ class DriverDashboardScreen extends StatefulWidget {
 }
 
 class _DriverDashboardScreenState extends State<DriverDashboardScreen> {
-  final _db = DBHelper.instance;
   List<DailyEntry> _myEntries = [];
   bool _loading = true;
+  StreamSubscription<List<DailyEntry>>? _sub;
 
   @override
   void initState() {
     super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    // Scoped strictly to this driver — never the full fleet.
-    final entries = await _db.searchEntries(query: widget.user.name);
-    if (!mounted) return;
-    setState(() {
-      _myEntries = entries;
-      _loading = false;
+    // Scoped strictly to this driver's own name — never the full fleet.
+    // Real-time: any entry an admin adds/edits for this driver, on any
+    // device, appears here instantly.
+    _sub = EntryRepository.instance.watchAll().listen((all) {
+      if (!mounted) return;
+      setState(() {
+        _myEntries = all.where((e) => e.driverName == widget.user.name).toList();
+        _loading = false;
+      });
     });
   }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load() async {} // kept for RefreshIndicator compatibility; stream keeps data live
 
   String _money(double v) => '₹${NumberFormat('#,##0.##').format(v)}';
 

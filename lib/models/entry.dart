@@ -1,8 +1,11 @@
+import 'audit_fields.dart';
+
+/// Firestore document in the `daily_collections` collection.
 class DailyEntry {
-  final int? id;
+  final String? id; // Firestore document ID
   final String date; // yyyy-MM-dd
-  final int vehicleId;
-  final int driverId;
+  final String vehicleId;
+  final String driverId;
   final String vehicleName; // denormalized for easy display / report
   final String driverName; // denormalized for easy display / report
   final double onlineCollection;
@@ -14,6 +17,7 @@ class DailyEntry {
   final double otherExpense;
   final double oldBalance;
   final String notes;
+  final AuditFields audit;
 
   DailyEntry({
     this.id,
@@ -31,6 +35,7 @@ class DailyEntry {
     this.otherExpense = 0,
     this.oldBalance = 0,
     this.notes = '',
+    this.audit = const AuditFields(),
   });
 
   /// Total money collected (online + cash)
@@ -46,7 +51,6 @@ class DailyEntry {
   double get balance => oldBalance + profit;
 
   Map<String, dynamic> toMap() => {
-        'id': id,
         'date': date,
         'vehicleId': vehicleId,
         'driverId': driverId,
@@ -61,13 +65,14 @@ class DailyEntry {
         'otherExpense': otherExpense,
         'oldBalance': oldBalance,
         'notes': notes,
+        ...audit.toMap(),
       };
 
-  factory DailyEntry.fromMap(Map<String, dynamic> m) => DailyEntry(
-        id: m['id'] as int?,
-        date: m['date'] as String,
-        vehicleId: m['vehicleId'] as int,
-        driverId: m['driverId'] as int,
+  factory DailyEntry.fromMap(String id, Map<String, dynamic> m) => DailyEntry(
+        id: id,
+        date: m['date'] as String? ?? '',
+        vehicleId: m['vehicleId'] as String? ?? '',
+        driverId: m['driverId'] as String? ?? '',
         vehicleName: m['vehicleName'] as String? ?? '',
         driverName: m['driverName'] as String? ?? '',
         onlineCollection: (m['onlineCollection'] as num?)?.toDouble() ?? 0,
@@ -79,13 +84,14 @@ class DailyEntry {
         otherExpense: (m['otherExpense'] as num?)?.toDouble() ?? 0,
         oldBalance: (m['oldBalance'] as num?)?.toDouble() ?? 0,
         notes: m['notes'] as String? ?? '',
+        audit: AuditFields.fromMap(m),
       );
 
   DailyEntry copyWith({
-    int? id,
+    String? id,
     String? date,
-    int? vehicleId,
-    int? driverId,
+    String? vehicleId,
+    String? driverId,
     String? vehicleName,
     String? driverName,
     double? onlineCollection,
@@ -97,6 +103,7 @@ class DailyEntry {
     double? otherExpense,
     double? oldBalance,
     String? notes,
+    AuditFields? audit,
   }) {
     return DailyEntry(
       id: id ?? this.id,
@@ -114,6 +121,7 @@ class DailyEntry {
       otherExpense: otherExpense ?? this.otherExpense,
       oldBalance: oldBalance ?? this.oldBalance,
       notes: notes ?? this.notes,
+      audit: audit ?? this.audit,
     );
   }
 }

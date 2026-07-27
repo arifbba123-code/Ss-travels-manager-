@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
-import '../db/db_helper.dart';
+import 'package:provider/provider.dart';
 import '../models/vehicle.dart';
 import '../models/driver.dart';
+import '../providers/auth_provider.dart';
+import '../services/vehicle_repository.dart';
+import '../services/driver_repository.dart';
 import '../theme/app_theme.dart';
 
 class FleetScreen extends StatefulWidget {
@@ -13,26 +16,12 @@ class FleetScreen extends StatefulWidget {
 }
 
 class _FleetScreenState extends State<FleetScreen> with SingleTickerProviderStateMixin {
-  final _db = DBHelper.instance;
   late TabController _tab;
-  List<Vehicle> _vehicles = [];
-  List<Driver> _drivers = [];
 
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 2, vsync: this);
-    _load();
-  }
-
-  Future<void> _load() async {
-    final v = await _db.getVehicles();
-    final d = await _db.getDrivers();
-    if (!mounted) return;
-    setState(() {
-      _vehicles = v;
-      _drivers = d;
-    });
   }
 
   @override
@@ -66,28 +55,38 @@ class _FleetScreenState extends State<FleetScreen> with SingleTickerProviderStat
 
   // ---------------- VEHICLES ----------------
   Widget _vehicleTab() {
-    if (_vehicles.isEmpty) {
-      return const Center(child: Text('No vehicles yet. Tap + to add one.', style: TextStyle(color: AppColors.grey)));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _vehicles.length,
-      itemBuilder: (context, i) {
-        final v = _vehicles[i];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: ListTile(
-            leading: const CircleAvatar(backgroundColor: AppColors.blue, child: Icon(Icons.directions_car, color: Colors.white)),
-            title: Text(v.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            subtitle: Text(v.number, style: const TextStyle(color: AppColors.grey)),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(icon: const Icon(Icons.edit, color: AppColors.gold), onPressed: () => _addEditVehicle(existing: v)),
-                IconButton(icon: const Icon(Icons.delete_outline, color: AppColors.red), onPressed: () => _deleteVehicle(v)),
-              ],
-            ),
-          ),
+    return StreamBuilder<List<Vehicle>>(
+      stream: VehicleRepository.instance.watchAll(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator(color: AppColors.gold));
+        }
+        final vehicles = snap.data!;
+        if (vehicles.isEmpty) {
+          return const Center(
+              child: Text('No vehicles yet. Tap + to add one.', style: TextStyle(color: AppColors.grey)));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: vehicles.length,
+          itemBuilder: (context, i) {
+            final v = vehicles[i];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                leading: const CircleAvatar(backgroundColor: AppColors.blue, child: Icon(Icons.directions_car, color: Colors.white)),
+                title: Text(v.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: Text(v.number, style: const TextStyle(color: AppColors.grey)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(icon: const Icon(Icons.edit, color: AppColors.gold), onPressed: () => _addEditVehicle(existing: v)),
+                    IconButton(icon: const Icon(Icons.delete_outline, color: AppColors.red), onPressed: () => _deleteVehicle(v)),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -116,12 +115,14 @@ class _FleetScreenState extends State<FleetScreen> with SingleTickerProviderStat
       ),
     );
     if (ok == true && nameCtrl.text.trim().isNotEmpty) {
+      final acting = context.read<AuthProvider>().currentAdmin!;
       if (existing == null) {
-        await _db.insertVehicle(Vehicle(name: nameCtrl.text.trim(), number: numberCtrl.text.trim()));
+        await VehicleRepository.instance
+            .create(Vehicle(name: nameCtrl.text.trim(), number: numberCtrl.text.trim()), acting);
       } else {
-        await _db.updateVehicle(Vehicle(id: existing.id, name: nameCtrl.text.trim(), number: numberCtrl.text.trim(), active: existing.active));
+        await VehicleRepository.instance.update(
+            existing.copyWith(name: nameCtrl.text.trim(), number: numberCtrl.text.trim()), acting);
       }
-      await _load();
       widget.onChanged();
     }
   }
@@ -129,36 +130,46 @@ class _FleetScreenState extends State<FleetScreen> with SingleTickerProviderStat
   Future<void> _deleteVehicle(Vehicle v) async {
     final ok = await _confirmDelete('vehicle "${v.name}"');
     if (ok && v.id != null) {
-      await _db.deleteVehicle(v.id!);
-      await _load();
+      final acting = context.read<AuthProvider>().currentAdmin!;
+      await VehicleRepository.instance.delete(v, acting);
       widget.onChanged();
     }
   }
 
   // ---------------- DRIVERS ----------------
   Widget _driverTab() {
-    if (_drivers.isEmpty) {
-      return const Center(child: Text('No drivers yet. Tap + to add one.', style: TextStyle(color: AppColors.grey)));
-    }
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _drivers.length,
-      itemBuilder: (context, i) {
-        final d = _drivers[i];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 10),
-          child: ListTile(
-            leading: const CircleAvatar(backgroundColor: AppColors.purple, child: Icon(Icons.person, color: Colors.white)),
-            title: Text(d.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            subtitle: Text(d.phone, style: const TextStyle(color: AppColors.grey)),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(icon: const Icon(Icons.edit, color: AppColors.gold), onPressed: () => _addEditDriver(existing: d)),
-                IconButton(icon: const Icon(Icons.delete_outline, color: AppColors.red), onPressed: () => _deleteDriver(d)),
-              ],
-            ),
-          ),
+    return StreamBuilder<List<Driver>>(
+      stream: DriverRepository.instance.watchAll(),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator(color: AppColors.gold));
+        }
+        final drivers = snap.data!;
+        if (drivers.isEmpty) {
+          return const Center(
+              child: Text('No drivers yet. Tap + to add one.', style: TextStyle(color: AppColors.grey)));
+        }
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: drivers.length,
+          itemBuilder: (context, i) {
+            final d = drivers[i];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10),
+              child: ListTile(
+                leading: const CircleAvatar(backgroundColor: AppColors.purple, child: Icon(Icons.person, color: Colors.white)),
+                title: Text(d.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: Text(d.phone, style: const TextStyle(color: AppColors.grey)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(icon: const Icon(Icons.edit, color: AppColors.gold), onPressed: () => _addEditDriver(existing: d)),
+                    IconButton(icon: const Icon(Icons.delete_outline, color: AppColors.red), onPressed: () => _deleteDriver(d)),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -187,12 +198,14 @@ class _FleetScreenState extends State<FleetScreen> with SingleTickerProviderStat
       ),
     );
     if (ok == true && nameCtrl.text.trim().isNotEmpty) {
+      final acting = context.read<AuthProvider>().currentAdmin!;
       if (existing == null) {
-        await _db.insertDriver(Driver(name: nameCtrl.text.trim(), phone: phoneCtrl.text.trim()));
+        await DriverRepository.instance
+            .create(Driver(name: nameCtrl.text.trim(), phone: phoneCtrl.text.trim()), acting);
       } else {
-        await _db.updateDriver(Driver(id: existing.id, name: nameCtrl.text.trim(), phone: phoneCtrl.text.trim(), active: existing.active));
+        await DriverRepository.instance.update(
+            existing.copyWith(name: nameCtrl.text.trim(), phone: phoneCtrl.text.trim()), acting);
       }
-      await _load();
       widget.onChanged();
     }
   }
@@ -200,8 +213,8 @@ class _FleetScreenState extends State<FleetScreen> with SingleTickerProviderStat
   Future<void> _deleteDriver(Driver d) async {
     final ok = await _confirmDelete('driver "${d.name}"');
     if (ok && d.id != null) {
-      await _db.deleteDriver(d.id!);
-      await _load();
+      final acting = context.read<AuthProvider>().currentAdmin!;
+      await DriverRepository.instance.delete(d, acting);
       widget.onChanged();
     }
   }
