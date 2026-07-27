@@ -20,10 +20,6 @@ dependencies:
   firebase_auth: ^6.5.0
   cloud_firestore: ^6.1.2
 
-  # Google Sign-In v7 — new singleton API (GoogleSignIn.instance),
-  # see lib/services/firebase_auth_service.dart for the migrated flow.
-  google_sign_in: ^7.2.0
-
   # Share to WhatsApp / other apps. v12 is what finally moved to the
   # same `web: ^1.x` generation as current Firebase packages — this is
   # the actual fix for the original firebase_auth/share_plus conflict.

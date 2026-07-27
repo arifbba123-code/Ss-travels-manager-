@@ -47,15 +47,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> _submitGoogle() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('remember_me', _rememberMe);
-    if (!mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AuthLoadingScreen.google()),
-    );
-  }
-
   Future<void> _forgotPassword() async {
     final ctrl = TextEditingController(text: _emailCtrl.text.trim());
     final email = await showDialog<String>(
@@ -280,35 +271,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             child: const Text('Login'),
                           ),
                         ),
-                        const SizedBox(height: 24),
-                        Row(
-                          children: [
-                            const Expanded(child: Divider(color: Color(0xFF2A2A2A))),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              child: Text('or continue with',
-                                  style: TextStyle(color: AppColors.grey, fontSize: 12)),
-                            ),
-                            const Expanded(child: Divider(color: Color(0xFF2A2A2A))),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: _submitGoogle,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              side: const BorderSide(color: Color(0xFF2A2A2A)),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20)),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            icon: const _GoogleG(),
-                            label: const Text('Continue with Google',
-                                style: TextStyle(fontWeight: FontWeight.w600)),
-                          ),
-                        ),
                         const SizedBox(height: 32),
                         GestureDetector(
                           onTap: _showContactOwnerSheet,
@@ -386,15 +348,6 @@ class _Logo extends StatelessWidget {
   }
 }
 
-class _GoogleG extends StatelessWidget {
-  const _GoogleG();
-  @override
-  Widget build(BuildContext context) {
-    return const Text('G',
-        style: TextStyle(
-            color: AppColors.gold, fontWeight: FontWeight.w900, fontSize: 16));
-  }
-}
 
 class _ContactRow extends StatelessWidget {
   final IconData icon;

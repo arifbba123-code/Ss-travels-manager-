@@ -7,21 +7,16 @@ import 'role_router.dart';
 
 /// SCREEN 2 — Loading
 ///
-/// Shown right after the user taps Login (or chooses Google Sign-In).
+/// Shown right after the user taps Login.
 /// Authenticates with Firebase, resolves the account's role from the
 /// Firestore `admins` collection, then routes to the matching dashboard.
+///
+/// NOTE: Google Sign-In is temporarily removed (email/password only).
 class AuthLoadingScreen extends StatefulWidget {
-  final String? email;
-  final String? password;
-  final bool google;
+  final String email;
+  final String password;
 
-  const AuthLoadingScreen({super.key, required String this.email, required String this.password})
-      : google = false;
-
-  const AuthLoadingScreen.google({super.key})
-      : email = null,
-        password = null,
-        google = true;
+  const AuthLoadingScreen({super.key, required this.email, required this.password});
 
   @override
   State<AuthLoadingScreen> createState() => _AuthLoadingScreenState();
@@ -38,10 +33,8 @@ class _AuthLoadingScreenState extends State<AuthLoadingScreen> {
 
   Future<void> _run() async {
     try {
-      final firebaseUser = widget.google
-          ? await FirebaseAuthService.instance.signInWithGoogle()
-          : await FirebaseAuthService.instance
-              .signInWithEmail(email: widget.email!, password: widget.password!);
+      final firebaseUser = await FirebaseAuthService.instance
+          .signInWithEmail(email: widget.email, password: widget.password);
 
       if (!mounted) return;
       setState(() => _status = 'Checking account role…');
