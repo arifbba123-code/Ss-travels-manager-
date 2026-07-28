@@ -69,8 +69,11 @@ class _AuthLoadingScreenState extends State<AuthLoadingScreen> {
       SnackBar(
         backgroundColor: AppColors.panel2,
         behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 6),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        content: Text(message, style: const TextStyle(color: Colors.white)),
+        // TEMPORARY (debugging): message currently contains the raw
+        // FirebaseAuthException "code\nmessage" — see firebase_auth_service.dart.
+        content: Text(message, maxLines: 4, style: const TextStyle(color: Colors.white)),
       ),
     );
   }
